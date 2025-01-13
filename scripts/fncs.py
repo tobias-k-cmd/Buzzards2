@@ -44,4 +44,27 @@ def load_raw_files(input_folder):
     duplicates = ids.index.to_series().duplicated()
     gdfs = [gdf for gdf,duplicated in zip(gdfs,duplicates) if not duplicated]
     ids = ids.reset_index().drop_duplicates().set_index("animal_id")
+
+    gdfs = clean_data(gdfs)
+
     return gdfs, ids
+
+def clean_data(gdfs, cols="default"):
+    
+    if cols == "default":
+        cols = ["alt","bat","solar_cell","temp","animal_code","geometry"]
+    elif cols == "all":
+        cols = gdfs[0].columns
+    elif isinstance(cols, list):
+        pass
+
+    gdfs_new = []
+
+    for gdf in gdfs:
+        gdf = gdf.drop(gdf[gdf.wrong_gps].index)
+        gdf = gdf.drop(gdf[(gdf.lat == 0) | (gdf.lon == 0)].index)
+        gdf = gdf.sort_index(axis=0, level=["animal_id","datetime"])
+        gdf = gdf.loc[:,cols]
+        gdfs_new.append(gdf)
+
+    return gdfs_new
