@@ -64,6 +64,7 @@ def clean_data(gdfs, cols="default"):
         gdf = gdf.drop(gdf[gdf.wrong_gps].index)
         gdf = gdf.drop(gdf[(gdf.lat == 0) | (gdf.lon == 0)].index)
         gdf = gdf.sort_index(axis=0, level=["animal_id","datetime"])
+        gdf = gdf[~gdf.index.duplicated(keep='first')]
         gdf = gdf.loc[:,cols]
         gdfs_new.append(gdf)
 
