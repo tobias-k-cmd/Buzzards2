@@ -115,7 +115,7 @@ def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile):
     # z = z / z.max()
     # z = z.reshape(X.shape)
     polygons_temp = []
-    
+
     contours = measure.find_contours(z, kde_percentile)
     for contour in log_progress(contours,leave=False,desc="Contours"):
         scaled_contour = np.column_stack((x_grid[contour[:, 1].astype(int)], y_grid[contour[:, 0].astype(int)]))
@@ -191,7 +191,7 @@ def join_overlapping_polygons(sr_geoms):
     return sr_geoms
 
 def assign_points_to_polygons(gdf,sr_geoms):
-    cluster = pd.Series(pd.NA,index=gdf.index)
+    cluster = pd.Series(np.NAN,index=gdf.index, dtype="int64")
     for sr_id,sr_geom in zip(sr_geoms.index,sr_geoms.geometry):
         cluster.loc[gdf.within(sr_geom) | gdf.touches(sr_geom)] = sr_id
     

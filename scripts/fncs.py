@@ -1,7 +1,10 @@
+from time import sleep
 import pandas as pd
 import geopandas as gpd
+from rasterstats import zonal_stats
 import os
 from shapely.geometry import Point, Polygon
+from tqdm.notebook import tqdm as log_progress
 
 def load_raw_files(input_folder):
     """Load raw anitra tracking files.
@@ -18,7 +21,7 @@ def load_raw_files(input_folder):
     gdfs = []
     ids = []
 
-    for filename in os.listdir(input_folder):
+    for filename in log_progress(os.listdir(input_folder),desc="Loading files"):
         file_path = os.path.join(input_folder, filename)
 
         # Load file into a DataFrame
@@ -69,3 +72,11 @@ def clean_data(gdfs, cols="default"):
         gdfs_new.append(gdf)
 
     return gdfs_new
+
+def zonal_stats_for_raster(geoms,raster_path,raster_cls,raster_crs,raster_key):
+    zs = zonal_stats(geoms.to_crs(raster_crs), raster_path ,categorical=True,category_map=raster_key)
+    zs = pd.DataFrame(zs, index = geoms.index).fillna(0)
+    zs = zs.div(zs.sum(axis=1),axis=0)
+    zs_missing = set(raster_cls) - set(zs.columns)
+    zs = zs.reindex(columns=zs.columns.tolist() + list(zs_missing), fill_value=0)
+    return zs
