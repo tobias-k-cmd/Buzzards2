@@ -109,21 +109,8 @@ def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile, weights=None
     kde = kde.fit(cluster_xy, sample_weight=w)
 
     z = np.exp(kde.score_samples(xy))
-    flat_density = z.ravel()
-    sorted_indices = np.argsort(flat_density)[::-1]  # Sort in descending order
-    sorted_density = flat_density[sorted_indices]
-    cumulative_volume = np.cumsum(sorted_density)
-    cumulative_volume /= cumulative_volume[-1] # Normalize to 1
-
-    # Reorder cumulative volume to match original grid order
-    volume_grid = np.zeros_like(flat_density)
-    volume_grid[sorted_indices] = cumulative_volume
-    z = volume_grid.reshape(X.shape)
+    z = get_volume(z, X.shape)
     
-
-    # z = (z - z.min()) / (z.max() - z.min())
-    # z = z / z.max()
-    # z = z.reshape(X.shape)
     polygons_temp = []
 
     contours = measure.find_contours(z, kde_percentile)
@@ -140,6 +127,19 @@ def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile, weights=None
 
     polygons_temp = create_polygons_with_holes(polygons_temp)
     return polygons_temp
+
+def get_volume(z, grid_shape):
+    flat_density = z.ravel()
+    sorted_indices = np.argsort(flat_density)[::-1]  # Sort in descending order
+    sorted_density = flat_density[sorted_indices]
+    cumulative_volume = np.cumsum(sorted_density)
+    cumulative_volume /= cumulative_volume[-1] # Normalize to 1
+
+    # Reorder cumulative volume to match original grid order
+    volume_grid = np.zeros_like(flat_density)
+    volume_grid[sorted_indices] = cumulative_volume
+    z = volume_grid.reshape(grid_shape)
+    return z
 
 def wdbscan_clustering(gdf, epsilon=1000, mu=48):
     X = pd.DataFrame({"lat":gdf.geometry.y,"lon":gdf.geometry.x, "dur":gdf.dur}
