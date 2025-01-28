@@ -87,7 +87,17 @@ def create_polygons_with_holes(polygons):
     
     return new_polygons
 
-def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile):
+def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile, weights=None):
+    if weights is not None:
+        if weights in cluster.columns:
+            w = (cluster.dur / timedelta(hours=1)).clip(upper=6)
+        elif "weights" in cluster.columns:
+            w = cluster.weights
+        else:
+            raise ValueError("Weights not found")
+    else:
+        w = np.ones(len(cluster))
+
     cluster_xy = pd.DataFrame({"lat":cluster.geometry.x, "lon":cluster.geometry.y})
     x_grid = np.arange(cluster.geometry.x.min()-offset, cluster.geometry.x.max()+offset, cell_size)
     y_grid = np.arange(cluster.geometry.y.min()-offset, cluster.geometry.y.max()+offset, cell_size)
@@ -96,7 +106,7 @@ def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile):
     xy = np.vstack([X.ravel(), Y.ravel()]).T
     xy = pd.DataFrame(xy,columns=["lat","lon"])
     kde = KernelDensity(kernel='gaussian', bandwidth=bandwidth)
-    kde = kde.fit(cluster_xy, sample_weight=(cluster.dur / timedelta(hours=1)).clip(upper=6))
+    kde = kde.fit(cluster_xy, sample_weight=w)
 
     z = np.exp(kde.score_samples(xy))
     flat_density = z.ravel()
