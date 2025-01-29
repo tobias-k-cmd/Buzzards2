@@ -2,6 +2,7 @@ import pandas as pd
 import geopandas as gpd
 import networkx as nx
 import numpy as np
+import time
 from shapely.geometry import Polygon, MultiPoint, LinearRing
 from datetime import timedelta
 from scipy.spatial.distance import pdist, squareform
@@ -13,13 +14,16 @@ from skimage import measure
 from shapely import make_valid, distance
 
 
-def cluster_track(gdf, sr_min_sample_n, kde_offset, kde_cell_size, kde_bandwidth, kde_percentile, kde_reduction):
+def cluster_track(gdf, sr_min_sample_n, kde_offset, kde_cell_size, kde_bandwidth, kde_percentile, kde_reduction, time_log=False):
     crs_temp = "EPSG:3857"
 
     gdf = gdf.to_crs(crs_temp)
     
     # cluster points with wdbscan
+    tic = time.time()
     pred = wdbscan_clustering(gdf)
+    if time_log:
+        print(f"WDbscan took: {(time.time()-tic)/60:.6f} min")
 
     # remove cluster that don't create a Polygon
     pred = pred.replace(pred.value_counts().index[pred.value_counts()<=2].values, pd.NA)
@@ -41,7 +45,7 @@ def cluster_track(gdf, sr_min_sample_n, kde_offset, kde_cell_size, kde_bandwidth
             if len(cluster) < sr_min_sample_n:
                 sr_geoms_new.append(cluster.geometry.union_all().convex_hull)
             else:
-                sr_geoms_new.extend(kde_area(cluster, kde_offset, kde_cell_size, kde_bandwidth, kde_percentile))
+                sr_geoms_new.extend(kde_area(cluster, kde_offset, kde_cell_size, kde_bandwidth, kde_percentile, time_log=time_log))
 
         sr_geoms = gpd.GeoDataFrame(geometry=sr_geoms_new,crs=crs_temp)
     
@@ -87,7 +91,7 @@ def create_polygons_with_holes(polygons):
     
     return new_polygons
 
-def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile, weights=None):
+def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile, weights=None, time_log=False):
     if weights is not None:
         if weights in cluster.columns:
             w = (cluster.dur / timedelta(hours=1)).clip(upper=6)
@@ -106,11 +110,23 @@ def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile, weights=None
     xy = np.vstack([X.ravel(), Y.ravel()]).T
     xy = pd.DataFrame(xy,columns=["lat","lon"])
     kde = KernelDensity(kernel='gaussian', bandwidth=bandwidth)
-    kde = kde.fit(cluster_xy, sample_weight=w)
 
+    tic = time.time()
+    kde = kde.fit(cluster_xy, sample_weight=w)
+    if time_log:
+        print(f"KDE fit took: {(time.time()-tic)/60:.6f} min")
+
+    tic = time.time()
     z = np.exp(kde.score_samples(xy))
+    if time_log:
+        print(f"KDE score samples took: {(time.time()-tic)/60:.6f} min")
+
+    tic = time.time()
     z = get_volume(z, X.shape)
-    
+    if time_log:
+        print(f"Get volume took: {(time.time()-tic)/60:.6f} min")
+
+    tic = time.time()
     polygons_temp = []
 
     contours = measure.find_contours(z, kde_percentile)
@@ -126,6 +142,9 @@ def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile, weights=None
         polygons_temp.append(polygon)
 
     polygons_temp = create_polygons_with_holes(polygons_temp)
+    if time_log:
+        print(f"Get contours took: {(time.time()-tic)/60:.6f} min")
+
     return polygons_temp
 
 def get_volume(z, grid_shape):
