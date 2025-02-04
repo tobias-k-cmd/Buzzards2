@@ -12,9 +12,10 @@ from sklearn.neighbors import KernelDensity
 from shapelysmooth import  taubin_smooth
 from skimage import measure
 from shapely import make_valid, distance
+from statsmodels.nonparametric.bandwidths import bw_scott, bw_silverman
 
 
-def cluster_track(gdf, sr_min_sample_n, kde_offset, kde_cell_size, kde_bandwidth, kde_percentile, kde_reduction, time_log=False):
+def cluster_track(gdf, sr_min_sample_n, kde_offset, kde_cell_size, kde_percentile, kde_reduction, kde_bandwidth, weights = None, time_log=False):
     crs_temp = "EPSG:3857"
 
     gdf = gdf.to_crs(crs_temp)
@@ -45,7 +46,7 @@ def cluster_track(gdf, sr_min_sample_n, kde_offset, kde_cell_size, kde_bandwidth
             if len(cluster) < sr_min_sample_n:
                 sr_geoms_new.append(cluster.geometry.union_all().convex_hull)
             else:
-                sr_geoms_new.extend(kde_area(cluster, kde_offset, kde_cell_size, kde_bandwidth, kde_percentile, time_log=time_log))
+                sr_geoms_new.extend(kde_area(cluster, kde_offset, kde_cell_size, kde_percentile, kde_bandwidth, weights, time_log))
 
         sr_geoms = gpd.GeoDataFrame(geometry=sr_geoms_new,crs=crs_temp)
     
@@ -91,7 +92,9 @@ def create_polygons_with_holes(polygons):
     
     return new_polygons
 
-def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile, weights=None, time_log=False):
+def kde_area(cluster, offset, cell_size, kde_percentile,bandwidth = "Scott", weights=None, time_log=False):
+    cluster_xy = pd.DataFrame({"lat":cluster.geometry.x, "lon":cluster.geometry.y})
+
     if weights is not None:
         if weights in cluster.columns:
             w = (cluster.dur / timedelta(hours=1)).clip(upper=6)
@@ -102,7 +105,18 @@ def kde_area(cluster, offset, cell_size, bandwidth, kde_percentile, weights=None
     else:
         w = np.ones(len(cluster))
 
-    cluster_xy = pd.DataFrame({"lat":cluster.geometry.x, "lon":cluster.geometry.y})
+    if isinstance(bandwidth, str):
+        if bandwidth == "Scott":
+            bandwidth = np.mean(bw_scott(cluster_xy))
+        elif bandwidth == "Silverman":
+            bandwidth = np.mean(bw_silverman(cluster_xy))
+        else:
+            raise ValueError("Bandwidth estimation method not found")
+    elif isinstance(bandwidth, (int, float)):
+        pass
+    else:
+        raise ValueError("Bandwidth must be a string or a number")
+
     x_grid = np.arange(cluster.geometry.x.min()-offset, cluster.geometry.x.max()+offset, cell_size)
     y_grid = np.arange(cluster.geometry.y.min()-offset, cluster.geometry.y.max()+offset, cell_size)
     X,Y = np.meshgrid(x_grid, y_grid)
